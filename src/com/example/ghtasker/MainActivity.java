@@ -23,6 +23,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import com.example.ghtasker.DialogUser.DialogCallBack;
+import com.example.ghtasker.NetworkTasker.ParserCallBack;
 
 import android.net.Uri;
 import android.os.AsyncTask;
@@ -35,7 +36,6 @@ import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.util.Log;
-import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
@@ -45,7 +45,10 @@ import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.TextView;
 
-public class MainActivity extends Activity implements DialogCallBack{
+public class MainActivity extends Activity implements DialogCallBack, ParserCallBack{
+	
+	private static final String KEY_USER = "user";
+	private static final String KEY_REPO = "repository";
 	
 	DialogUser dialogUser;
 	String url = ""; //AndroidTNTU-3
@@ -58,6 +61,10 @@ public class MainActivity extends Activity implements DialogCallBack{
 	ImageView image;
 	ListView listView;
 	Button button;
+	
+	NetworkTasker networkTasker;
+	NetworkTasker networkTasker_repo;
+	Object info;
 	
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -75,74 +82,13 @@ public class MainActivity extends Activity implements DialogCallBack{
         button.setOnClickListener(new MyListener());
         button.setVisibility(View.INVISIBLE);
         listView = (ListView) findViewById(R.id.listView1);
-        
+                
+        networkTasker = new NetworkTasker();
+        networkTasker.setParserCallBack(this);
+
     }
 
-    
-    
-    public class MyNetworkTask extends AsyncTask<String, Void, JSONObject> {
-
-    	JSONObject result;
-    	
-		@Override
-		protected JSONObject doInBackground(String... params) {
-			HttpClient client = new DefaultHttpClient();
-			//HttpPost post = new HttpPost(params[0]);
-			HttpGet request = new HttpGet(params[0]);
-			
-			try {
-				HttpResponse response = client.execute(request);
-				HttpEntity entity = response.getEntity();
-				
-				if (entity != null){
-					
-					String responseBody = EntityUtils.toString(entity);
-					Log.i("AAA:", responseBody);
-					try {
-						result = new JSONObject(responseBody);						
-					} catch (JSONException e) {
-						e.printStackTrace();
-					}
-				}
-				
-			} catch (ClientProtocolException e) {
-				e.printStackTrace();
-			} catch (IOException e) {
-				e.printStackTrace();
-			}
-			return result;
-		}
-		
-		@Override
-	    protected void onPostExecute(JSONObject result) {
-	      super.onPostExecute(result);
-	      
-	      String name = "";
-	      String location = "";
-	      String avatar_url = "";
-
-	      
-		try {
-			name = result.getString("name");
-			location = result.getString("location");
-			avatar_url = result.getString("avatar_url");			
-			email = result.getString("email");
-		} catch (JSONException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-	      
-	      textViewName.setText(name);
-	      textViewAdress.setText(location);
-	      if (email != null){
-	    	  button.setVisibility(View.VISIBLE);
-	      }
-	      new ImageLoaderTasker().execute(avatar_url);
-	      
-	    }
-    	
-    }
-    
+           
     public class ImageLoaderTasker extends AsyncTask<String, Void, Bitmap> {
     	InputStream input;
     	@Override
@@ -162,10 +108,8 @@ public class MainActivity extends Activity implements DialogCallBack{
     	         input = b_entity.getContent();
     	         
     		} catch (ClientProtocolException e) {
-    			// TODO Auto-generated catch block
     			e.printStackTrace();
     		} catch (IOException e) {
-    			// TODO Auto-generated catch block
     			e.printStackTrace();
     		}
             
@@ -180,74 +124,8 @@ public class MainActivity extends Activity implements DialogCallBack{
 	      image.setVisibility(View.VISIBLE);
 	      
     	}
-
     }
     
-    public class RepoLoaderTasker extends AsyncTask<String, Void, ArrayList<String>> {
-    	InputStream input;
-    	
-    	ArrayList<String> array_repo = new ArrayList<String>();
-    	
-    	@Override
-    	protected ArrayList<String> doInBackground(String... params) {
-
-    		HttpClient client_repo = new DefaultHttpClient();
-			HttpGet request_repo = new HttpGet(params[0]);
-			
-			
-    		try {
-    			StringBuilder builder = new StringBuilder();
-    			HttpResponse response_repo = client_repo.execute(request_repo);
-    			HttpEntity entity_repo = response_repo.getEntity();
-    			
-    			InputStream content = entity_repo.getContent();
-		        BufferedReader reader = new BufferedReader(new InputStreamReader(content));
-		        String line;
-		        while ((line = reader.readLine()) != null) {
-		          builder.append(line);
-		        }
-		        
-				try {
-					JSONArray jsonArray = new JSONArray(builder.toString());
-					for (int i = 0; i < jsonArray.length(); i++) {
-				          JSONObject jsonObject = jsonArray.getJSONObject(i);
-				         array_repo.add(jsonObject.getString("name"));
-				         // Log.i("AAA:", repo[i].toString());
-				        }
-					
-				} catch (JSONException e) {
-					e.printStackTrace();
-				}				      
-		        
-    		} catch (ClientProtocolException e) {
-    			e.printStackTrace();
-    		} catch (IOException e) {
-    			e.printStackTrace();
-    		}
-                       		
-    		return array_repo;
-    	}
-    	
-    	@Override
-	    protected void onPostExecute(ArrayList<String> result) {
-	      super.onPostExecute(result);
-
-	      if (result.size() !=0){
-	    	  ArrayAdapter<String> adapter = new ArrayAdapter<String>(getApplicationContext(),
-	    	        R.layout.list_item, result);
-	      
-	    	  listView.setAdapter(adapter);
-	      }else{
-	    	  
-	      listView.setEmptyView(findViewById(android.R.id.empty));
-	      
-	      }
-	      
-    	}    	
-
-    }
-    
-
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         getMenuInflater().inflate(R.menu.main, menu);     
@@ -280,18 +158,14 @@ public class MainActivity extends Activity implements DialogCallBack{
 	        	intent.putExtra(android.content.Intent.EXTRA_SUBJECT, "Hi");
 	        	intent.putExtra(android.content.Intent.EXTRA_TEXT, "Hi");
 	        	
-	        	startActivity(Intent.createChooser(intent,
-	                    "Send Email..."));
+	        	startActivity(Intent.createChooser(intent, "Send Email..."));
 
-	        break;
-	            
+	        break;	            
 	        default:
 
 	        }
 		}
-
-		
-    	
+		    	
     }
 
 	@Override
@@ -299,8 +173,44 @@ public class MainActivity extends Activity implements DialogCallBack{
 		this.user = user;
 		url = "https://api.github.com/users/" + user;
 		url_repo = "https://api.github.com/users/"  + user  + "/repos"; //AndroidTNTU-3
-		new MyNetworkTask().execute(url);
-		new RepoLoaderTasker().execute(url_repo);
+		networkTasker.execute(url, KEY_USER);
+        networkTasker_repo = new NetworkTasker();
+        networkTasker_repo.setParserCallBack(this);
+		networkTasker_repo.execute(url_repo, KEY_REPO);
 	}
+
+	@Override
+	public void setInfo(Object info) {
+		
+		if (info instanceof UserInfo){
+
+			UserInfo userInfo = (UserInfo) info; 
+			textViewName.setText(userInfo.getName());
+			textViewAdress.setText(userInfo.getLocation());
+			
+			if (email != null){
+		    	  button.setVisibility(View.VISIBLE);
+		      }
+			
+			new ImageLoaderTasker().execute(userInfo.getAvatar_url());
+			
+	    }else if (info instanceof RepoInfo){
+	    	
+	    	ArrayList<String> result = ((RepoInfo) info).getArray();
+
+	    	if (result.size() !=0){
+		    	  ArrayAdapter<String> adapter = new ArrayAdapter<String>(getApplicationContext(),
+		    	        R.layout.list_item, result);
+		      
+		    	  listView.setAdapter(adapter);
+		      }else{
+		    	  
+		      listView.setEmptyView(findViewById(android.R.id.empty));
+		
+		   }
+	    }
+	}
+
+	
     
 }
